@@ -5,7 +5,6 @@ from tkinter import messagebox
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
-from tkinter.ttk import Progressbar
 
 def main():
     def on_submit():
@@ -26,12 +25,8 @@ def main():
             return
         
         # Run extraction process with selected categories
-        try:
-            run_combined_extraction(selected_categories, ifc_file_path.get(), excel_file_path.get())
-            messagebox.showinfo("Information", f"Data saved in {excel_file_path.get()}")
-            root.destroy()
-        except Exception as e:
-            messagebox.showerror("Error", f"An error occurred during extraction: {e}")
+        run_combined_extraction(selected_categories, ifc_file_path.get(), excel_file_path.get())
+        root.destroy()
 
     # Open file dialog to browse for IFC file
     def browse_ifc_file():
@@ -50,11 +45,8 @@ def main():
 
     # Load categories from the IFC file
     def load_categories(ifc_file_path):
-        try:
-            all_categories = load_ifc_data(ifc_file_path)
-            update_category_options(all_categories)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load categories from IFC file: {e}")
+        all_categories = load_ifc_data(ifc_file_path)
+        update_category_options(all_categories)
 
     # Load data from the IFC file and return a sorted list of categories
     def load_ifc_data(ifc_file_path):
@@ -66,7 +58,10 @@ def main():
         # Iterate through all IFC products to collect their types
         for entity in ifc_file.by_type("IfcProduct"):
             categories.add(entity.is_a())
-        return sorted(categories)
+        categories = list(categories)
+        categories.sort()
+
+        return categories
 
     # Update the Listbox with available categories
     def update_category_options(categories):
@@ -85,17 +80,15 @@ def main():
     # Setup the main window for the application
     root = tk.Tk()
     root.title("IFC Extractor")
-    root.geometry("400x600")
-    root.minsize(400, 600)
-    root.resizable(True, True)
-    root.configure(bg='#5D8A66')
+
+    border_color = '#5D8A66'
 
     # Variables for file paths
     ifc_file_path = tk.StringVar()
     excel_file_path = tk.StringVar()
 
     # Button to browse IFC file
-    browse_ifc_button = tk.Button(root, text="Browse IFC File", bg="white", fg='#5D8A66', command=browse_ifc_file, borderwidth=2)
+    browse_ifc_button = tk.Button(root, text="Browse IFC File", bg="white", fg=border_color, command=browse_ifc_file, borderwidth=2)
     browse_ifc_button.pack(pady=5, padx=10)
 
     # Label displaying selected IFC file path
@@ -103,7 +96,7 @@ def main():
     label_ifc_file.pack(pady=5, padx=10)
 
     # Button to browse for Excel file save location
-    browse_excel_button = tk.Button(root, text="Browse Excel File", bg="white", fg='#5D8A66', command=browse_excel_file, borderwidth=2)
+    browse_excel_button = tk.Button(root, text="Browse Excel File", bg="white", fg=border_color, command=browse_excel_file, borderwidth=2)
     browse_excel_button.pack(pady=5, padx=10)
 
     # Label displaying selected Excel file path
@@ -118,16 +111,19 @@ def main():
     category_listbox.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
 
     # Button to select all categories
-    select_all_button = tk.Button(root, text="Select All Categories", bg="white", fg='#5D8A66', command=on_select_all, borderwidth=2)
+    select_all_button = tk.Button(root, text="Select All Categories", bg="white", fg=border_color, command=on_select_all, borderwidth=2)
     select_all_button.pack(pady=5, padx=10)
 
     # Button to deselect all categories
-    deselect_all_button = tk.Button(root, text="Deselect All Categories", bg="white", fg='#5D8A66', command=on_deselect_all, borderwidth=2)
+    deselect_all_button = tk.Button(root, text="Deselect All Categories", bg="white", fg=border_color, command=on_deselect_all, borderwidth=2)
     deselect_all_button.pack(pady=5, padx=10)
 
     # Button to start extraction
-    submit_button = tk.Button(root, text="Extract", bg="white", fg='#5D8A66', command=on_submit, borderwidth=2)
+    submit_button = tk.Button(root, text="Extract", bg="white", fg=border_color, command=on_submit, borderwidth=2)
     submit_button.pack(pady=10, padx=10)
+
+    root.geometry("400x600")
+    root.configure(bg='#5D8A66')
 
     root.mainloop()
 
@@ -154,11 +150,9 @@ def run_combined_extraction(categories, ifc_file_path, excel_file_path):
             df = pd.DataFrame(category_data)
             df.to_excel(writer, sheet_name=f'{category}_Properties', index=False)
 
-    try:
-        writer.close()
-        customize_excel(excel_file_path)
-    except Exception as e:
-        raise Exception(f"Failed to save Excel file: {e}")
+    writer.close()
+    customize_excel(excel_file_path)
+    messagebox.showinfo("Information", f"Data saved in {excel_file_path}")
 
 # Function to extract data from the IFC file for the selected category
 def extract_category_data(ifc_file, category_name):
@@ -172,7 +166,7 @@ def extract_category_data(ifc_file, category_name):
         
         psets_data = {}
         # Extract Property Sets associated with the element
-        for pset_relation in getattr(element, "IsDefinedBy", []):
+        for pset_relation in element.IsDefinedBy:
             if pset_relation.is_a("IfcRelDefinesByProperties"):
                 property_set = pset_relation.RelatingPropertyDefinition
                 if property_set.is_a("IfcPropertySet"):
@@ -220,12 +214,16 @@ def customize_excel(excel_file_path):
             for cell in column:
                 try:
                     if cell.value:
-                        max_length = max(max_length, len(str(cell.value)))
+                        value_length = len(str(cell.value))
+                        if value_length > max_length:
+                            max_length = value_length
                 except:
                     pass
-            ws.column_dimensions[column_letter].width = max_length + 2
+            adjusted_width = max(max_length, 10)
+            ws.column_dimensions[column_letter].width = adjusted_width
 
     wb.save(excel_file_path)
 
+# Start the application when script is run directly
 if __name__ == "__main__":
     main()
